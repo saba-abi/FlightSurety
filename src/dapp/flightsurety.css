@@ -16,28 +16,10 @@ body {
     margin-top: 20px;
 }
 
-h5 {
-    color: #999999;
+th, td {
+    padding: 10px;
 }
 
-section {
-    margin-bottom: 50px;
-}
-
-.field {
-    font-weight: bold;
-    text-align: right;
-}
-
-.field-value {
-    color: #0e7fa8;
-}
-
-label.form {
-    font-size: 14px;
-    margin-right: 20px;
-}
-
-input {
-    margin-right: 30px;
+#display-wrapper {
+    border-top: solid 1px white;
 }

@@ -6,6 +6,25 @@ pragma solidity ^0.8.17;
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "hardhat/console.sol";
+
+interface FlightSuretyData {
+    function isOperational() external view returns (bool);
+
+    function registerAirline(address airline) external;
+
+    function isRegisteredAirline(address airline) external view returns (bool);
+
+    function numberOfRegisteredAirlines() external view returns (uint);
+
+    function hasFundedEnough(address airline) external view returns (bool);
+
+    function creditInsurees(
+        address airline,
+        string memory flight,
+        uint256 timestamp
+    ) external;
+}
 
 /************************************************** */
 /* FlightSurety Smart Contract                      */
@@ -35,6 +54,10 @@ contract FlightSuretyApp {
     }
     mapping(bytes32 => Flight) private flights;
 
+    mapping(address => address[]) private airlinesVotes;
+
+    FlightSuretyData data;
+
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
@@ -61,6 +84,51 @@ contract FlightSuretyApp {
         _;
     }
 
+    modifier fundedEnough() {
+        require(
+            data.hasFundedEnough(msg.sender),
+            "Caller has not funded 10 ETH yet"
+        );
+        _;
+    }
+
+    modifier multiConsensus(address airline) {
+        require(
+            data.isRegisteredAirline(msg.sender),
+            "Caller is not existing airline"
+        );
+
+        require(
+            !data.isRegisteredAirline(airline),
+            "Airline is already registered"
+        );
+
+        uint m = data.numberOfRegisteredAirlines();
+
+        // Only existing airline may register a new airline until there are at least four airlines registered
+        if (m < 5) {
+            _;
+        }
+        // Registration of fifth and subsequent airlines requires multi-party consensus of 50% of registered airlines
+        else {
+            bool alreadyVoted = false;
+            for (uint i = 0; i < airlinesVotes[airline].length; i++) {
+                if (airlinesVotes[airline][i] == msg.sender) {
+                    alreadyVoted = true;
+                    break;
+                }
+            }
+            require(!alreadyVoted, "Caller already voted");
+
+            uint n = m.div(2);
+            airlinesVotes[airline].push(msg.sender);
+            if (airlinesVotes[airline].length > n) {
+                _;
+                delete airlinesVotes[airline];
+            }
+        }
+    }
+
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
@@ -69,16 +137,17 @@ contract FlightSuretyApp {
      * @dev Contract constructor
      *
      */
-    constructor() {
+    constructor(address dataContract) {
         contractOwner = msg.sender;
+        data = FlightSuretyData(dataContract);
     }
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
-    function isOperational() public pure returns (bool) {
-        return true; // Modify to call data contract's status
+    function isOperational() public view returns (bool) {
+        return data.isOperational();
     }
 
     /********************************************************************************************/
@@ -89,19 +158,15 @@ contract FlightSuretyApp {
      * @dev Add an airline to the registration queue
      *
      */
-    function registerAirline()
-        external
-        pure
-        returns (bool success, uint256 votes)
-    {
-        return (success, 0);
+    function registerAirline(
+        address airline
+    ) external fundedEnough multiConsensus(airline) {
+        data.registerAirline(airline);
     }
 
-    /**
-     * @dev Register a future flight for insuring.
-     *
-     */
-    function registerFlight() external pure {}
+    function isRegisteredAirline(address airline) external view returns (bool) {
+        return data.isRegisteredAirline(airline);
+    }
 
     /**
      * @dev Called after oracle has updated flight status
@@ -112,7 +177,14 @@ contract FlightSuretyApp {
         string memory flight,
         uint256 timestamp,
         uint8 statusCode
-    ) internal pure {}
+    ) internal {
+        console.log("start processFlightStatus", flight);
+        console.log("statusCode", statusCode);
+        if (statusCode == STATUS_CODE_LATE_AIRLINE) {
+            data.creditInsurees(airline, flight, timestamp);
+        }
+        console.log("end processFlightStatus");
+    }
 
     // Generate a request for oracles to fetch flight information
     function fetchFlightStatus(
@@ -192,12 +264,12 @@ contract FlightSuretyApp {
 
     // Register an oracle with the contract
     function registerOracle() external payable {
+        console.log("start registerOracle");
         // Require registration fee
         require(msg.value >= REGISTRATION_FEE, "Registration fee is required");
-
         uint8[3] memory indexes = generateIndexes(msg.sender);
-
         oracles[msg.sender] = Oracle({isRegistered: true, indexes: indexes});
+        console.log("end registerOracle");
     }
 
     function getMyIndexes() external view returns (uint8[3] memory) {
@@ -220,6 +292,7 @@ contract FlightSuretyApp {
         uint256 timestamp,
         uint8 statusCode
     ) external {
+        console.log("start submitOracleResponse");
         require(
             (oracles[msg.sender].indexes[0] == index) ||
                 (oracles[msg.sender].indexes[1] == index) ||
@@ -248,6 +321,7 @@ contract FlightSuretyApp {
             // Handle flight status as appropriate
             processFlightStatus(airline, flight, timestamp, statusCode);
         }
+        console.log("end submitOracleResponse");
     }
 
     function getFlightKey(
@@ -281,20 +355,14 @@ contract FlightSuretyApp {
     // Returns array of three non-duplicating integers from 0-9
     function getRandomIndex(address account) internal returns (uint8) {
         uint8 maxValue = 10;
-
-        // Pseudo random number...the incrementing nonce adds variation
+        nonce = (nonce + 1) % 255;
+        console.log("nonce", nonce);
         uint8 random = uint8(
             uint256(
-                keccak256(
-                    abi.encodePacked(blockhash(block.number - nonce++), account)
-                )
+                keccak256(abi.encodePacked(block.timestamp, nonce, account))
             ) % maxValue
         );
-
-        if (nonce > 250) {
-            nonce = 0; // Can only fetch blockhashes for last 256 blocks so we adapt
-        }
-
+        console.log("random", random);
         return random;
     }
 

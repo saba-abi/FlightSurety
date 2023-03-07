@@ -1,5 +1,5 @@
 const HDWalletProvider = require('@truffle/hdwallet-provider');
-const mnemonic = "other glory citizen fury valid public era long neutral present nominee bracket";
+const mnemonic = "private drastic exile dance menu skin eternal chapter frog smile vast option";
 
 module.exports = {
   networks: {

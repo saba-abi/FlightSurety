@@ -14,7 +14,7 @@ contract('Flight Surety Tests', async (accounts) => {
   /* Operations and Settings                                                              */
   /****************************************************************************************/
 
-  it(`(multiparty) has correct initial isOperational() value`, async function () {
+  it('(multiparty) has correct initial isOperational() value', async () => {
 
     // Get operating status
     let status = await config.flightSuretyData.isOperational.call();
@@ -22,7 +22,7 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
-  it(`(multiparty) can block access to setOperatingStatus() for non-Contract Owner account`, async function () {
+  it('(multiparty) can block access to setOperatingStatus() for non-Contract Owner account', async () => {
 
     // Ensure that access is denied for non-Contract Owner account
     let accessDenied = false;
@@ -36,7 +36,7 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
-  it(`(multiparty) can allow access to setOperatingStatus() for Contract Owner account`, async function () {
+  it('(multiparty) can allow access to setOperatingStatus() for Contract Owner account', async () => {
 
     // Ensure that access is allowed for Contract Owner account
     let accessDenied = false;
@@ -50,7 +50,7 @@ contract('Flight Surety Tests', async (accounts) => {
 
   });
 
-  it(`(multiparty) can block access to functions using requireIsOperational when operating status is false`, async function () {
+  it('(multiparty) can block access to functions using requireIsOperational when operating status is false', async () => {
 
     await config.flightSuretyData.setOperatingStatus(false);
 
@@ -80,12 +80,28 @@ contract('Flight Surety Tests', async (accounts) => {
     catch (e) {
 
     }
-    let result = await config.flightSuretyData.isAirline.call(newAirline);
+
+    const result = await config.flightSuretyData.isRegisteredAirline.call(newAirline);
 
     // ASSERT
     assert.equal(result, false, "Airline should not be able to register another airline if it hasn't provided funding");
 
   });
 
+  it.only('(airline) can register an Airline using registerAirline() if funded 10 ETH', async () => {
 
+    // ARRANGE
+    let newAirline = accounts[2];
+
+    await config.flightSuretyData.fund({ from: config.firstAirline, value: 10 * config.weiMultiple });
+
+    // ACT
+    await config.flightSuretyApp.registerAirline(newAirline, { from: config.firstAirline });
+
+    const result = await config.flightSuretyData.isRegisteredAirline.call(newAirline);
+
+    // ASSERT
+    assert.equal(result, true, "Airline should be able to register another airline if it has provided enough funding");
+
+  });
 });
